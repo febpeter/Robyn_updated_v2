@@ -682,7 +682,7 @@ check_calibration <- function(dt_input, date_var, calibration_input, dayInterval
 }
 
 check_obj_weight <- function(calibration_input, objective_weights, refresh) {
-  obj_len <- ifelse(is.null(calibration_input), 2, 3)
+  obj_len <- ifelse(is.null(calibration_input), 3, 3)
   if (!is.null(objective_weights)) {
     if ((length(objective_weights) != obj_len)) {
       stop(paste0("objective_weights must have length of ", obj_len))
