@@ -694,9 +694,9 @@ check_obj_weight <- function(calibration_input, objective_weights, refresh) {
   if (is.null(objective_weights)) {
       objective_weights <- c(1, 1, 1)
     }
+   return(objective_weights)
   }
-  return(objective_weights)
-}
+ 
 
 check_iteration <- function(calibration_input, iterations, trials, hyps_fixed, refresh) {
   if (!refresh) {
