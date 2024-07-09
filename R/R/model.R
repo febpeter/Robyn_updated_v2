@@ -590,7 +590,7 @@ robyn_mmm <- function(InputCollect,
 
     # Set multi-objective dimensions for objective functions (errors)
     if (is.null(calibration_input)) {
-      optimizer$tell(ng$p$MultiobjectiveReference(), tuple(1, 1))
+      optimizer$tell(ng$p$MultiobjectiveReference(), tuple(1, 1, 1))
       if (is.null(objective_weights)) {
         objective_weights <- tuple(1, 1, 1)
       } else {
