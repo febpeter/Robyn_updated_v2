@@ -592,9 +592,9 @@ robyn_mmm <- function(InputCollect,
     if (is.null(calibration_input)) {
       optimizer$tell(ng$p$MultiobjectiveReference(), tuple(1, 1))
       if (is.null(objective_weights)) {
-        objective_weights <- tuple(1, 1)
+        objective_weights <- tuple(1, 1, 1)
       } else {
-        objective_weights <- tuple(objective_weights[1], objective_weights[2])
+        objective_weights <- tuple(objective_weights[1], objective_weights[2], objective_weights[3])
       }
       optimizer$set_objective_weights(objective_weights)
     } else {
@@ -936,7 +936,7 @@ robyn_mmm <- function(InputCollect,
           if (!hyper_fixed) {
             if (is.null(calibration_input)) {
               for (co in 1:iterPar) {
-                optimizer$tell(nevergrad_hp[[co]], tuple(nrmse.collect[co], MAPE.collect[co]))
+                optimizer$tell(nevergrad_hp[[co]], tuple(nrmse.collect[co], decomp.rssd.collect[co], MAPE.collect[co]))
               }
             } else {
               for (co in 1:iterPar) {
