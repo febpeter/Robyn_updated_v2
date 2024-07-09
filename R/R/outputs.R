@@ -158,7 +158,7 @@ robyn_outputs <- function(InputCollect, OutputModels,
     clusterCollect <- try(robyn_clusters(
       OutputCollect,
       dep_var_type = InputCollect$dep_var_type,
-      quiet = quiet, export = export, ...
+      quiet = quiet, export = export, weights = rep(1,4), ...
     ))
     if ("data" %in% names(clusterCollect)) {
       OutputCollect$resultHypParam <- left_join(
