@@ -406,37 +406,29 @@ errors_scores <- function(df, balance = rep(1, 4), ts_validation = TRUE, ...) {
   return(p)
 }
                             
-.plot_topsols_errors <- function(df, top_sols, limit = 1, balance = rep(1, 4)) {
+.plot_topsols_errors <- function(df, top_sols, limit = 1, balance = rep(1, 3)) {
   balance <- balance / sum(balance)
-  
-  # Join data and create labels
-  joined_data <- left_join(df, select(top_sols, 1:4), by = "solID") %>%
+  left_join(df, select(top_sols, 1:3), "solID") %>%
     mutate(
-      alpha = ifelse(is.na(cluster), 0.6, 1),
-      label = ifelse(!is.na(cluster), sprintf("[%s.%s]", cluster, rank), NA)
-    )
-  
-  # Create ggplot object for 3D scatterplot
-  p <- ggplot(joined_data, aes(x = nrmse, y = decomp.rssd, z = MAPE_train, color = cluster, text = label)) +
-    geom_point(size = 3, alpha = 0.8) +
+      alpha = ifelse(is.na(.data$cluster), 0.6, 1),
+      label = ifelse(!is.na(.data$cluster), sprintf(
+        "[%s.%s]", .data$cluster, .data$rank
+      ), NA)
+    ) %>%
+    ggplot(aes(x = .data$nrmse, y = .data$decomp.rssd)) +
+    geom_point(aes(colour = .data$cluster, alpha = .data$alpha)) +
+    geom_text(aes(label = .data$label), na.rm = TRUE, hjust = -0.3) +
+    guides(alpha = "none", colour = "none") +
     labs(
       title = paste("Selecting Top", limit, "Performing Models by Cluster"),
       subtitle = "Based on minimum (weighted) distance to origin",
-      x = "NRMSE", y = "DECOMP.RSSD", z = "MAPE_train",
+      x = "NRMSE", y = "DECOMP.RSSD",
       caption = sprintf(
-        "Weights: NRMSE %s%%, DECOMP.RSSD %s%%, MAPE_train %s%%, mape %s%%" ,
-        round(100 * balance[1]), round(100 * balance[2]), round(100 * balance[3]), round(100 * balance[4])
+        "Weights: NRMSE %s%%, DECOMP.RSSD %s%%, MAPE %s%%",
+        round(100 * balance[1]), round(100 * balance[2]), round(100 * balance[3])
       )
     ) +
-    theme_minimal()
-  
-  # Convert ggplot object to plotly object for interactivity
-  p <- ggplotly(p)
-  
-  # Customize plotly layout
-  p <- layout(p, title = list(text = paste("Selecting Top", limit, "Performing Models by Cluster")))
-  
-  return(p)
+    theme_lares(background = "white", )
 }
 
 .plot_topsols_rois <- function(df, top_sols, all_media, limit = 1) {
