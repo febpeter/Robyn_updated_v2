@@ -526,7 +526,7 @@ check_hyperparameters <- function(hyperparameters = NULL, adstock = NULL,
     # Old workflow: replace exposure with spend hyperparameters
     if (any(get_hyp_names %in% ref_hyp_name_expo)) {
       get_expo_pos <- which(get_hyp_names %in% ref_hyp_name_expo)
-      get_hyp_names[get_expo_pos] <- ref_all_media[get_expo_pos]
+      get_hyp_names[get_expo_pos] <- ref_all_media[!ref_all_media %in% HYPS_OTHERS][get_expo_pos]
       names(hyperparameters_ordered) <- get_hyp_names
     }
     check_hyper_limits(hyperparameters_ordered, "thetas")
@@ -682,7 +682,7 @@ check_calibration <- function(dt_input, date_var, calibration_input, dayInterval
 }
 
 check_obj_weight <- function(calibration_input, objective_weights, refresh) {
-  obj_len <- ifelse(is.null(calibration_input), 3, 3)
+  obj_len <- ifelse(is.null(calibration_input), 2, 3)
   if (!is.null(objective_weights)) {
     if ((length(objective_weights) != obj_len)) {
       stop(paste0("objective_weights must have length of ", obj_len))
@@ -691,12 +691,15 @@ check_obj_weight <- function(calibration_input, objective_weights, refresh) {
       stop("objective_weights must be >= 0 & <= 10")
     }
   }
-  if (is.null(objective_weights)) {
-      objective_weights <- c(1, 1, 1)
+  if (is.null(objective_weights) & refresh) {
+    if (obj_len == 2) {
+      objective_weights <- c(0, 1)
+    } else {
+      objective_weights <- c(0, 1, 1)
     }
-   return(objective_weights)
   }
- 
+  return(objective_weights)
+}
 
 check_iteration <- function(calibration_input, iterations, trials, hyps_fixed, refresh) {
   if (!refresh) {
