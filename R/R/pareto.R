@@ -555,13 +555,13 @@ robyn_pareto <- function(InputCollect, OutputModels,
 #' @rdname robyn_outputs
 #' @param xi,yi Numeric. Coordinates values per observation.
 #' @export
-pareto_front <- function(xi, yi, zi, fronts = 1, sort = TRUE) {
+pareto_front <- function(xi, yi, zi, pareto_fronts = 1, sort = TRUE) {
   stopifnot(length(xi) == length(yi) & length(yi) == length(zi))
   d <- data.frame(xi, yi, zi)
   Dtemp <- D <- d[order(d$xi, d$yi, d$zi, decreasing = FALSE), ]
   df <- data.frame()
   i <- 1
-  while (nrow(Dtemp) >= 1 & i <= max(fronts)) {
+  while (nrow(Dtemp) >= 1 & i <= max(pareto_fronts)) {
     these <- Dtemp[which(!duplicated(cummin(Dtemp$yi)) & !duplicated(cummin(Dtemp$zi))), ]
     these$pareto_front <- i
     df <- rbind(df, these)
