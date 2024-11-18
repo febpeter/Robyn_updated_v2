@@ -55,7 +55,9 @@
 #' \code{objective_weights} must be defined, i.e. set c(2, 1) to give double weight
 #' to the 1st (NRMSE). This is an experimental feature. There's no research on
 #' optimal weight setting. Subjective weights might strongly bias modeling results.
-#' @param seed Integer. For reproducible results when running nevergrad.
+#' @param seed Integer. For reproducible results when running nevergrad and
+#' clustering. Each trial will increase the seed by 1 unit (i.e. 10 trials with
+#' seed 1 will share 9 results with 10 trials with seed 2).
 #' @param lambda_control Deprecated in v3.6.0.
 #' @param outputs Boolean. If set to TRUE, will run \code{robyn_run()} and
 #' \code{robyn_outputs()}, returning a list with OutputModels and
@@ -122,9 +124,9 @@ robyn_run <- function(InputCollect = NULL,
       OutputCollect = OutputCollect
     ))
   }
-
+  
   t0 <- Sys.time()
-
+  
   ### Use previously exported model using json_file
   if (!is.null(json_file)) {
     # InputCollect <- robyn_inputs(json_file = json_file, dt_input = dt_input, dt_holidays = dt_holidays)
@@ -140,14 +142,14 @@ robyn_run <- function(InputCollect = NULL,
   } else {
     bootstrap <- NULL
   }
-
+  
   #####################################
   #### Set local environment
-
+  
   if (!"hyperparameters" %in% names(InputCollect) || is.null(InputCollect$hyperparameters)) {
     stop("Must provide 'hyperparameters' in robyn_inputs()'s output first")
   }
-
+  
   # Check and warn on legacy inputs (using InputCollect params as robyn_run() inputs)
   InputCollect <- check_legacy_input(InputCollect, cores, iterations, trials, intercept_sign, nevergrad_algo)
   # Overwrite values imported from InputCollect
@@ -156,7 +158,7 @@ robyn_run <- function(InputCollect = NULL,
   if (length(legacyValues) > 0) {
     for (i in seq_along(InputCollect)) assign(names(InputCollect)[i], InputCollect[[i]])
   }
-
+  
   # Keep in mind: https://www.jottr.org/2022/12/05/avoid-detectcores/
   max_cores <- max(1L, parallel::detectCores(), na.rm = TRUE)
   if (is.null(cores)) {
@@ -166,14 +168,14 @@ robyn_run <- function(InputCollect = NULL,
     cores <- max_cores
   }
   if (cores == 0) cores <- 1
-
+  
   hyps_fixed <- !is.null(dt_hyper_fixed)
   if (hyps_fixed) trials <- iterations <- 1
   check_run_inputs(cores, iterations, trials, intercept_sign, nevergrad_algo)
   check_iteration(InputCollect$calibration_input, iterations, trials, hyps_fixed, refresh)
   init_msgs_run(InputCollect, refresh, lambda_control = NULL, quiet)
   objective_weights <- check_obj_weight(InputCollect$calibration_input, objective_weights, refresh)
-
+  
   #####################################
   #### Prepare hyper-parameters
   hyper_collect <- hyper_collector(
@@ -185,10 +187,10 @@ robyn_run <- function(InputCollect = NULL,
     cores = cores
   )
   InputCollect$hyper_updated <- hyper_collect$hyper_list_all
-
+  
   #####################################
   #### Run robyn_mmm() for each trial
-
+  
   OutputModels <- robyn_train(
     InputCollect, hyper_collect,
     cores = cores, iterations = iterations, trials = trials,
@@ -201,11 +203,11 @@ robyn_run <- function(InputCollect = NULL,
     objective_weights = objective_weights,
     refresh, seed, quiet
   )
-
+  
   attr(OutputModels, "hyper_fixed") <- hyper_collect$all_fixed
   attr(OutputModels, "bootstrap") <- bootstrap
   attr(OutputModels, "refresh") <- refresh
-
+  
   if (TRUE) {
     OutputModels$train_timestamp <- Sys.time()
     OutputModels$cores <- cores
@@ -219,7 +221,7 @@ robyn_run <- function(InputCollect = NULL,
     OutputModels$hyper_updated <- hyper_collect$hyper_list_all
     OutputModels$hyper_fixed <- hyper_collect$all_fixed
   }
-
+  
   # Not direct output & not all fixed hyperparameters
   if (is.null(dt_hyper_fixed)) {
     output <- OutputModels
@@ -234,14 +236,14 @@ robyn_run <- function(InputCollect = NULL,
       output <- robyn_outputs(InputCollect, OutputModels, ...)
     }
   }
-
+  
   # Created with assign from JSON file
   if (exists("clusters")) {
     if (!is.integer(get("clusters"))) {
       output$clusters <- get("clusters")
     }
   }
-
+  
   # Check convergence when more than 1 iteration
   if (!hyper_collect$all_fixed) {
     output[["convergence"]] <- robyn_converge(OutputModels, ...)
@@ -254,15 +256,15 @@ robyn_run <- function(InputCollect = NULL,
     }
     if (!quiet) message("Successfully recreated model ID: ", output$selectID)
   }
-
+  
   # Save hyper-parameters list
   output[["hyper_updated"]] <- hyper_collect$hyper_list_all
   output[["seed"]] <- seed
-
+  
   # Report total timing
   attr(output, "runTime") <- round(difftime(Sys.time(), t0, units = "mins"), 2)
   if (!quiet && iterations > 1) message(paste("Total run time:", attr(output, "runTime"), "mins"))
-
+  
   class(output) <- unique(c("robyn_models", class(output)))
   return(output)
 }
@@ -302,7 +304,7 @@ print.robyn_models <- function(x, ...) {
     convergence = if (!is_fixed) paste(x$convergence$conv_msg, collapse = "\n  ") else "Fixed hyper-parameters",
     hypers = flatten_hyps(x$hyper_updated)
   ))
-
+  
   if ("robyn_outputs" %in% class(x)) {
     print(glued(
       "
@@ -347,7 +349,7 @@ robyn_train <- function(InputCollect, hyper_collect,
                         refresh = FALSE, seed = 123,
                         quiet = FALSE) {
   hyper_fixed <- hyper_collect$all_fixed
-
+  
   if (hyper_fixed) {
     OutputModels <- list()
     OutputModels[[1]] <- robyn_mmm(
@@ -383,9 +385,9 @@ robyn_train <- function(InputCollect, hyper_collect,
         nevergrad_algo, "nevergrad algorithm..."
       ))
     }
-
+    
     OutputModels <- list()
-
+    
     for (ngt in 1:trials) { # ngt = 1
       if (!quiet) message(paste("  Running trial", ngt, "of", trials))
       model_output <- robyn_mmm(
@@ -478,10 +480,10 @@ robyn_mmm <- function(InputCollect,
       )
     }
   }
-
+  
   ################################################
   #### Collect hyperparameters
-
+  
   if (TRUE) {
     hypParamSamName <- names(hyper_collect$hyper_list_all)
     # Optimization hyper-parameters
@@ -495,14 +497,14 @@ robyn_mmm <- function(InputCollect,
     dt_hyper_fixed_mod <- hyper_collect$dt_hyper_fixed_mod
     hyper_fixed <- hyper_collect$all_fixed
   }
-
+  
   ################################################
   #### Setup environment
-
+  
   if (is.null(InputCollect$dt_mod)) {
     stop("Run InputCollect$dt_mod <- robyn_engineering() first to get the dt_mod")
   }
-
+  
   ## Get environment for parallel backend
   if (TRUE) {
     dt_mod <- InputCollect$dt_mod
@@ -526,10 +528,10 @@ robyn_mmm <- function(InputCollect,
     optimizer_name <- nevergrad_algo
     i <- NULL # For parallel iterations (globalVar)
   }
-
+  
   ################################################
   #### Get spend share
-
+  
   dt_inputTrain <- InputCollect$dt_input[rollingWindowStartWhich:rollingWindowEndWhich, ]
   temp <- select(dt_inputTrain, all_of(paid_media_spends))
   dt_spendShare <- data.frame(
@@ -556,7 +558,7 @@ robyn_mmm <- function(InputCollect,
     mutate(spend_share = .data$total_spend / sum(.data$total_spend))
   # Join both dataframes into a single one
   dt_spendShare <- left_join(dt_spendShare, dt_spendShareRF, "rn", suffix = c("", "_refresh"))
-
+  
   ################################################
   #### Get lambda
   lambda_min_ratio <- 0.0001 # default  value from glmnet
@@ -567,11 +569,11 @@ robyn_mmm <- function(InputCollect,
   )
   lambda_max <- max(lambdas) * 0.1
   lambda_min <- lambda_max * lambda_min_ratio
-
+  
   ################################################
   #### Start Nevergrad loop
   t0 <- Sys.time()
-
+  
   ## Set iterations
   # hyper_fixed <- hyper_count == 0
   if (hyper_fixed == FALSE) {
@@ -581,20 +583,20 @@ robyn_mmm <- function(InputCollect,
   } else {
     iterTotal <- iterPar <- iterNG <- 1
   }
-
+  
   ## Start Nevergrad optimizer
   if (!hyper_fixed) {
     my_tuple <- tuple(hyper_count)
     instrumentation <- ng$p$Array(shape = my_tuple, lower = 0, upper = 1)
     optimizer <- ng$optimizers$registry[optimizer_name](instrumentation, budget = iterTotal, num_workers = cores)
-
+    
     # Set multi-objective dimensions for objective functions (errors)
     if (is.null(calibration_input)) {
-      optimizer$tell(ng$p$MultiobjectiveReference(), tuple(1, 1, 1))
+      optimizer$tell(ng$p$MultiobjectiveReference(), tuple(1, 1))
       if (is.null(objective_weights)) {
-        objective_weights <- tuple(1, 1, 1)
+        objective_weights <- tuple(1, 1)
       } else {
-        objective_weights <- tuple(objective_weights[1], objective_weights[2], objective_weights[3])
+        objective_weights <- tuple(objective_weights[1], objective_weights[2])
       }
       optimizer$set_objective_weights(objective_weights)
     } else {
@@ -607,12 +609,12 @@ robyn_mmm <- function(InputCollect,
       optimizer$set_objective_weights(objective_weights)
     }
   }
-
+  
   ## Prepare loop
   resultCollectNG <- list()
   cnt <- 0
   if (!hyper_fixed && !quiet) pb <- txtProgressBar(max = iterTotal, style = 3)
-
+  
   sysTimeDopar <- tryCatch(
     {
       system.time({
@@ -621,7 +623,7 @@ robyn_mmm <- function(InputCollect,
           nevergrad_hp_val <- list()
           hypParamSamList <- list()
           hypParamSamNG <- NULL
-
+          
           if (hyper_fixed == FALSE) {
             # Setting initial seeds (co = cores)
             for (co in 1:iterPar) { # co = 1
@@ -651,31 +653,31 @@ robyn_mmm <- function(InputCollect,
           } else {
             hypParamSamNG <- select(dt_hyper_fixed_mod, all_of(hypParamSamName))
           }
-
+          
           # Must remain within this function for it to work
           robyn_iterations <- function(i, ...) { # i=1
             t1 <- Sys.time()
             #### Get hyperparameter sample
             hypParamSam <- hypParamSamNG[i, ]
             adstock <- check_adstock(adstock)
-
+            
             #### Transform media for model fitting
-            temp <- run_transformations(InputCollect, hypParamSam, adstock)
+            temp <- run_transformations(InputCollect, hypParamSam, ...)
             dt_modSaturated <- temp$dt_modSaturated
             dt_saturatedImmediate <- temp$dt_saturatedImmediate
             dt_saturatedCarryover <- temp$dt_saturatedCarryover
-
+            
             #####################################
             #### Split train & test and prepare data for modelling
-
+            
             dt_window <- dt_modSaturated
-
+            
             ## Contrast matrix because glmnet does not treat categorical variables (one hot encoding)
             y_window <- dt_window$dep_var
             x_window <- as.matrix(lares::ohse(select(dt_window, -.data$dep_var)))
             y_train <- y_val <- y_test <- y_window
             x_train <- x_val <- x_test <- x_window
-
+            
             ## Split train, test, and validation sets
             train_size <- hypParamSam[, "train_size"][[1]]
             val_size <- test_size <- (1 - train_size) / 2
@@ -691,7 +693,7 @@ robyn_mmm <- function(InputCollect,
             } else {
               y_val <- y_test <- x_val <- x_test <- NULL
             }
-
+            
             ## Define and set sign control
             dt_sign <- select(dt_window, -.data$dep_var)
             x_sign <- c(prophet_signs, context_signs, paid_media_signs, organic_signs)
@@ -728,27 +730,27 @@ robyn_mmm <- function(InputCollect,
                 upper.limits <- c(upper.limits, ifelse(x_sign[s] == "negative", 0, Inf))
               }
             }
-
+            
             #####################################
             #### Fit ridge regression with nevergrad's lambda
             # lambdas <- lambda_seq(x_train, y_train, seq_len = 100, lambda_min_ratio = 0.0001)
             # lambda_max <- max(lambdas)
             lambda_hp <- unlist(hypParamSamNG$lambda[i])
             if (hyper_fixed == FALSE) {
-              lambda_scaled <- max(lambda_min + (lambda_max - lambda_min) * lambda_hp)
+              lambda_scaled <- lambda_min + (lambda_max - lambda_min) * lambda_hp
             } else {
               lambda_scaled <- lambda_hp
             }
-
+            
             if (add_penalty_factor) {
               penalty.factor <- unlist(hypParamSamNG[i, grepl("_penalty", names(hypParamSamNG))])
             } else {
               penalty.factor <- rep(1, ncol(x_train))
             }
-
+            
             #####################################
             ## NRMSE: Model's fit error
-
+            
             ## If no lift calibration, refit using best lambda
             mod_out <- model_refit(
               x_train, y_train,
@@ -763,19 +765,19 @@ robyn_mmm <- function(InputCollect,
               ...
             )
             decompCollect <- model_decomp(
-              coefs = mod_out$coefs,
-              y_pred = mod_out$y_pred,
-              dt_modSaturated = dt_modSaturated,
-              dt_saturatedImmediate = dt_saturatedImmediate,
-              dt_saturatedCarryover = dt_saturatedCarryover,
-              dt_modRollWind = dt_modRollWind,
-              refreshAddedStart = refreshAddedStart
-            )
+              inputs = list(
+                coefs = mod_out$coefs,
+                y_pred = mod_out$y_pred,
+                dt_modSaturated = dt_modSaturated,
+                dt_saturatedImmediate = dt_saturatedImmediate,
+                dt_saturatedCarryover = dt_saturatedCarryover,
+                dt_modRollWind = dt_modRollWind,
+                refreshAddedStart = refreshAddedStart
+              ))
             nrmse <- ifelse(ts_validation, mod_out$nrmse_val, mod_out$nrmse_train)
-            # MAPE = ifelse(ts_validation, mod_out$MAPE_val, mod_out$MAPE_train)
             mape <- 0
             df.int <- mod_out$df.int
-
+            
             #####################################
             #### MAPE: Calibration error
             if (!is.null(calibration_input)) {
@@ -792,7 +794,7 @@ robyn_mmm <- function(InputCollect,
               )
               mape <- mean(liftCollect$mape_lift, na.rm = TRUE)
             }
-
+            
             #####################################
             #### DECOMP.RSSD: Business error
             # Sum of squared distance between decomp share and spend share to be minimized
@@ -831,7 +833,7 @@ robyn_mmm <- function(InputCollect,
             } else {
               dt_decompRF <- select(decompCollect$xDecompAgg, .data$rn, decomp_perc = .data$xDecompPerc) %>%
                 left_join(select(xDecompAggPrev, .data$rn, decomp_perc_prev = .data$xDecompPerc),
-                  by = "rn"
+                          by = "rn"
                 )
               decomp.rssd.media <- dt_decompRF %>%
                 filter(.data$rn %in% paid_media_spends) %>%
@@ -849,7 +851,7 @@ robyn_mmm <- function(InputCollect,
               decomp.rssd <- Inf
               dt_decompSpendDist$effect_share <- 0
             }
-
+            
             #####################################
             #### Collect Multi-Objective Errors and Iteration Results
             resultCollect <- list()
@@ -875,10 +877,10 @@ robyn_mmm <- function(InputCollect,
               iterNG = lng,
               iterPar = i
             )
-
+            
             total_common <- ncol(common)
             split_common <- which(colnames(common) == "lambda_min_ratio")
-
+            
             resultCollect[["resultHypParam"]] <- as_tibble(hypParamSam) %>%
               select(-.data$lambda) %>%
               bind_cols(common[, 1:split_common]) %>%
@@ -889,23 +891,23 @@ robyn_mmm <- function(InputCollect,
               ) %>%
               bind_cols(common[, (split_common + 1):total_common]) %>%
               dplyr::mutate_all(unlist)
-
+            
             resultCollect[["xDecompAgg"]] <- decompCollect$xDecompAgg %>%
               mutate(train_size = train_size) %>%
               bind_cols(common)
-
+            
             if (!is.null(calibration_input)) {
               resultCollect[["liftCalibration"]] <- liftCollect %>%
                 bind_cols(common)
             }
-
+            
             resultCollect[["decompSpendDist"]] <- dt_decompSpendDist %>%
               bind_cols(common)
-
+            
             resultCollect <- append(resultCollect, as.list(common))
             return(resultCollect)
           }
-
+          
           ########### Parallel start
           nrmse.collect <- NULL
           decomp.rssd.collect <- NULL
@@ -924,15 +926,15 @@ robyn_mmm <- function(InputCollect,
               doparCollect <- foreach(i = 1:iterPar, .options.RNG = seed) %dorng% robyn_iterations(i)
             )
           }
-
+          
           nrmse.collect <- unlist(lapply(doparCollect, function(x) x$nrmse))
           decomp.rssd.collect <- unlist(lapply(doparCollect, function(x) x$decomp.rssd))
           mape.lift.collect <- unlist(lapply(doparCollect, function(x) x$mape))
           MAPE.collect <- unlist(lapply(doparCollect, function(x) x$MAPE_train))
-
+          
           #####################################
           #### Nevergrad tells objectives
-
+          
           if (!hyper_fixed) {
             if (is.null(calibration_input)) {
               for (co in 1:iterPar) {
@@ -944,7 +946,7 @@ robyn_mmm <- function(InputCollect,
               }
             }
           }
-
+          
           resultCollectNG[[lng]] <- doparCollect
           if (!quiet) {
             cnt <- cnt + iterPar
@@ -964,43 +966,43 @@ robyn_mmm <- function(InputCollect,
       }
     }
   )
-
+  
   # stop cluster to avoid memory leaks
   if (cores > 1) {
     stopImplicitCluster()
     registerDoSEQ()
     getDoParWorkers()
   }
-
+  
   if (!hyper_fixed) {
     cat("\r", paste("\n  Finished in", round(sysTimeDopar[3] / 60, 2), "mins"))
     flush.console()
     close(pb)
   }
-
+  
   #####################################
   #### Final result collect
-
+  
   resultCollect <- list()
-
+  
   resultCollect[["resultHypParam"]] <- as_tibble(bind_rows(
     lapply(resultCollectNG, function(x) {
       bind_rows(lapply(x, function(y) y$resultHypParam))
     })
   ))
-
+  
   # resultCollect[["xDecompVec"]] <- as_tibble(bind_rows(
   #   lapply(resultCollectNG, function(x) {
   #     bind_rows(lapply(x, function(y) y$xDecompVec))
   #   })
   # ))
-
+  
   resultCollect[["xDecompAgg"]] <- as_tibble(bind_rows(
     lapply(resultCollectNG, function(x) {
       bind_rows(lapply(x, function(y) y$xDecompAgg))
     })
   ))
-
+  
   if (!is.null(calibration_input)) {
     resultCollect[["liftCalibration"]] <- as_tibble(bind_rows(
       lapply(resultCollectNG, function(x) {
@@ -1009,21 +1011,21 @@ robyn_mmm <- function(InputCollect,
     ) %>%
       arrange(.data$mape, .data$liftMedia, .data$liftStart))
   }
-
+  
   resultCollect[["decompSpendDist"]] <- as_tibble(bind_rows(
     lapply(resultCollectNG, function(x) {
       bind_rows(lapply(x, function(y) y$decompSpendDist))
     })
   ))
-
+  
   resultCollect$iter <- length(resultCollect$mape)
   resultCollect$elapsed.min <- sysTimeDopar[3] / 60
-
+  
   # Adjust accumulated time
   resultCollect$resultHypParam <- resultCollect$resultHypParam %>%
     mutate(ElapsedAccum = .data$ElapsedAccum - min(.data$ElapsedAccum) +
-      .data$Elapsed[which.min(.data$ElapsedAccum)])
-
+             .data$Elapsed[which.min(.data$ElapsedAccum)])
+  
   return(list(
     resultCollect = resultCollect,
     hyperBoundNG = hyper_bound_list_updated,
@@ -1031,26 +1033,34 @@ robyn_mmm <- function(InputCollect,
   ))
 }
 
-model_decomp <- function(coefs, y_pred,
-                         dt_modSaturated, dt_saturatedImmediate,
-                         dt_saturatedCarryover, dt_modRollWind,
-                         refreshAddedStart) {
+#' @rdname robyn_mmm
+#' @param inputs List. Elements to pass sub-functions
+#' @export
+model_decomp <- function(inputs = list()) {
+  coefs <- inputs$coefs
+  y_pred <- inputs$y_pred
+  dt_modSaturated <- inputs$dt_modSaturated
+  dt_saturatedImmediate <- inputs$dt_saturatedImmediate
+  dt_saturatedCarryover <- inputs$dt_saturatedCarryover
+  dt_modRollWind <- inputs$dt_modRollWind
+  refreshAddedStart <- inputs$refreshAddedStart
+  
   ## Input for decomp
   y <- dt_modSaturated$dep_var
   # x <- data.frame(x)
-
+  
   x <- select(dt_modSaturated, -.data$dep_var)
   intercept <- coefs[1]
   x_name <- names(x)
   x_factor <- x_name[sapply(x, is.factor)]
-
+  
   ## Decomp x
   xDecomp <- data.frame(mapply(function(regressor, coeff) {
     regressor * coeff
   }, regressor = x, coeff = coefs[-1]))
   xDecomp <- cbind(data.frame(intercept = rep(intercept, nrow(xDecomp))), xDecomp)
   xDecompOut <- cbind(data.frame(ds = dt_modRollWind$ds, y = y, y_pred = y_pred), xDecomp)
-
+  
   ## Decomp immediate & carryover response
   sel_coef <- c(rownames(coefs), names(coefs)) %in% names(dt_saturatedImmediate)
   coefs_media <- coefs[sel_coef]
@@ -1061,24 +1071,24 @@ model_decomp <- function(coefs, y_pred,
   mediaDecompCarryover <- data.frame(mapply(function(regressor, coeff) {
     regressor * coeff
   }, regressor = dt_saturatedCarryover, coeff = coefs_media))
-
+  
   ## Output decomp
   y_hat <- rowSums(xDecomp, na.rm = TRUE)
   y_hat.scaled <- rowSums(abs(xDecomp), na.rm = TRUE)
   xDecompOutPerc.scaled <- abs(xDecomp) / y_hat.scaled
   xDecompOut.scaled <- y_hat * xDecompOutPerc.scaled
-
+  
   temp <- select(xDecompOut, .data$intercept, all_of(x_name))
   xDecompOutAgg <- sapply(temp, function(x) sum(x))
   xDecompOutAggPerc <- xDecompOutAgg / sum(y_hat)
   xDecompOutAggMeanNon0 <- unlist(lapply(temp, function(x) ifelse(is.na(mean(x[x > 0])), 0, mean(x[x != 0]))))
   xDecompOutAggMeanNon0[is.nan(xDecompOutAggMeanNon0)] <- 0
   xDecompOutAggMeanNon0Perc <- xDecompOutAggMeanNon0 / sum(xDecompOutAggMeanNon0)
-
+  
   refreshAddedStartWhich <- which(xDecompOut$ds == refreshAddedStart)
   refreshAddedEnd <- max(xDecompOut$ds)
   refreshAddedEndWhich <- which(xDecompOut$ds == refreshAddedEnd)
-
+  
   temp <- select(xDecompOut, .data$intercept, all_of(x_name)) %>%
     slice(refreshAddedStartWhich:refreshAddedEndWhich)
   xDecompOutAggRF <- unlist(lapply(temp, function(x) sum(x)))
@@ -1087,7 +1097,7 @@ model_decomp <- function(coefs, y_pred,
   xDecompOutAggMeanNon0RF <- unlist(lapply(temp, function(x) ifelse(is.na(mean(x[x > 0])), 0, mean(x[x != 0]))))
   xDecompOutAggMeanNon0RF[is.nan(xDecompOutAggMeanNon0RF)] <- 0
   xDecompOutAggMeanNon0PercRF <- xDecompOutAggMeanNon0RF / sum(xDecompOutAggMeanNon0RF)
-
+  
   coefsOutCat <- coefsOut <- data.frame(rn = c(rownames(coefs), names(coefs)), coefs)
   if (length(x_factor) > 0) {
     coefsOut$rn <- sapply(x_factor, function(x) str_replace(coefsOut$rn, paste0(x, ".*"), x))
@@ -1099,7 +1109,7 @@ model_decomp <- function(coefs, y_pred,
     rename("coef" = 2) %>%
     summarise(coef = mean(.data$coef)) %>%
     arrange(match(.data$rn, rn_order))
-
+  
   decompOutAgg <- as_tibble(cbind(coefsOut, data.frame(
     xDecompAgg = xDecompOutAgg,
     xDecompPerc = xDecompOutAggPerc,
@@ -1111,7 +1121,7 @@ model_decomp <- function(coefs, y_pred,
     xDecompMeanNon0PercRF = xDecompOutAggMeanNon0PercRF,
     pos = xDecompOutAgg >= 0
   )))
-
+  
   decompCollect <- list(
     xDecompVec = xDecompOut, xDecompVec.scaled = xDecompOut.scaled,
     xDecompAgg = decompOutAgg, coefsOutCat = coefsOutCat,
@@ -1140,9 +1150,9 @@ model_refit <- function(x_train, y_train, x_val, y_val, x_test, y_test,
     intercept = intercept,
     ...
   ) # coef(mod)
-
+  
   df.int <- 1
-
+  
   ## Drop intercept if negative and intercept_sign == "non_negative"
   if (intercept_sign == "non_negative" && coef(mod)[1] < 0) {
     mod <- glmnet(
@@ -1159,7 +1169,7 @@ model_refit <- function(x_train, y_train, x_val, y_val, x_test, y_test,
     ) # coef(mod)
     df.int <- 0
   } # plot(mod); print(mod)
-
+  
   # Calculate all Adjusted R2
   y_train_pred <- as.vector(predict(mod, s = lambda, newx = x_train))
   rsq_train <- get_rsq(true = y_train, predicted = y_train_pred, p = ncol(x_train), df.int = df.int)
@@ -1173,10 +1183,9 @@ model_refit <- function(x_train, y_train, x_val, y_val, x_test, y_test,
     rsq_val <- rsq_test <- NA
     y_pred <- y_train_pred
   }
-
+  
   ## Adding MAPE
   MAPE_train <- mean(abs((y_train - y_train_pred)/(y_train)))
-  
   
   # Calculate all NRMSE
   nrmse_train <- sqrt(mean((y_train - y_train_pred)^2)) / (max(y_train) - min(y_train))
@@ -1186,7 +1195,7 @@ model_refit <- function(x_train, y_train, x_val, y_val, x_test, y_test,
   } else {
     nrmse_val <- nrmse_test <- y_val_pred <- y_test_pred <- NA
   }
-
+  
   mod_out <- list(
     rsq_train = rsq_train,
     rsq_val = rsq_val,
@@ -1203,7 +1212,7 @@ model_refit <- function(x_train, y_train, x_val, y_val, x_test, y_test,
     mod = mod,
     df.int = df.int
   )
-
+  
   return(mod_out)
 }
 
@@ -1235,26 +1244,26 @@ hyper_collector <- function(InputCollect, hyper_in, ts_validation, add_penalty_f
     all_media = InputCollect$all_media,
     all_vars = names(select(InputCollect$dt_mod, -c("ds", "dep_var")))
   )
-
+  
   # Manually add other hyper-parameters
   hypParamSamName <- c(hypParamSamName, HYPS_OTHERS)
-
+  
   # Check hyper_fixed condition + add lambda + penalty factor hyper-parameters names
   all_fixed <- check_hyper_fixed(InputCollect, dt_hyper_fixed, add_penalty_factor)
   hypParamSamName <- attr(all_fixed, "hypParamSamName")
-
+  
   if (!all_fixed) {
     # Collect media hyperparameters
     hyper_bound_list <- list()
     for (i in seq_along(hypParamSamName)) {
       hyper_bound_list <- append(hyper_bound_list, hyper_in[hypParamSamName[i]])
     }
-
+    
     # Add lambda hyperparameter
     if (!"lambda" %in% names(hyper_bound_list)) {
       hyper_bound_list$lambda <- c(0, 1)
     }
-
+    
     # Add train_size hyperparameter
     if (ts_validation) {
       if (!"train_size" %in% names(hyper_bound_list)) {
@@ -1271,7 +1280,7 @@ hyper_collector <- function(InputCollect, hyper_in, ts_validation, add_penalty_f
       hyper_bound_list$train_size <- 1
       message("Fitting time series with all available data...")
     }
-
+    
     # Add penalty factor hyperparameters
     for_penalty <- names(select(InputCollect$dt_mod, -.data$ds, -.data$dep_var))
     penalty_names <- paste0(for_penalty, "_penalty")
@@ -1282,24 +1291,24 @@ hyper_collector <- function(InputCollect, hyper_in, ts_validation, add_penalty_f
         }
       }
     }
-
+    
     # Get hyperparameters for Nevergrad
     hyper_bound_list_updated <- hyper_bound_list[
       which(unlist(lapply(hyper_bound_list, length) == 2))
     ]
-
+    
     # Get fixed hyperparameters
     hyper_bound_list_fixed <- hyper_bound_list[
       which(unlist(lapply(hyper_bound_list, length) == 1))
     ]
-
+    
     hyper_list_bind <- c(hyper_bound_list_updated, hyper_bound_list_fixed)
     hyper_list_all <- list()
     for (i in seq_along(hypParamSamName)) {
       hyper_list_all[[i]] <- hyper_list_bind[[hypParamSamName[i]]]
       names(hyper_list_all)[i] <- hypParamSamName[i]
     }
-
+    
     dt_hyper_fixed_mod <- data.frame(bind_cols(lapply(
       hyper_bound_list_fixed, function(x) rep(x, cores)
     )))
@@ -1309,16 +1318,16 @@ hyper_collector <- function(InputCollect, hyper_in, ts_validation, add_penalty_f
       hyper_bound_list_fixed[[i]] <- dt_hyper_fixed[[hypParamSamName[i]]]
       names(hyper_bound_list_fixed)[i] <- hypParamSamName[i]
     }
-
+    
     hyper_list_all <- hyper_bound_list_fixed
     hyper_bound_list_updated <- hyper_bound_list_fixed[
       which(unlist(lapply(hyper_bound_list_fixed, length) == 2))
     ]
-
+    
     dt_hyper_fixed_mod <- data.frame(matrix(hyper_bound_list_fixed, nrow = 1))
     names(dt_hyper_fixed_mod) <- names(hyper_bound_list_fixed)
   }
-
+  
   return(list(
     hyper_list_all = hyper_list_all,
     hyper_bound_list_updated = hyper_bound_list_updated,
@@ -1344,7 +1353,7 @@ init_msgs_run <- function(InputCollect, refresh, lambda_control = NULL, quiet = 
       "refreshDepth" %in% names(InputCollect),
       InputCollect$refreshDepth,
       ifelse("refreshCounter" %in% names(InputCollect),
-        InputCollect$refreshCounter, 0
+             InputCollect$refreshCounter, 0
       )
     )
     refresh <- as.integer(depth) > 0
