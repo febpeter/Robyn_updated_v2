@@ -591,7 +591,7 @@ robyn_onepagers <- function(
       ## 7. Immediate vs carryover
       df_imme_caov <- temp[[sid]]$plot7data
       p7 <- df_imme_caov %>%
-        mutate(type = factor(.data$type, levels = c("Carryover", "Immediate"))) %>%
+        mutate(type = factor(.data$type, levels = c("Immediate", "Carryover"))) %>%
         ggplot(aes(
           x = .data$percentage, y = .data$rn, fill = reorder(.data$type, as.integer(.data$type)),
           label = paste0(round(.data$percentage * 100), "%")
@@ -1332,7 +1332,7 @@ refresh_plots_json <- function(json_file, plot_folder = NULL, listInit = NULL, d
       solID = names(chainData),
       window_start = as.Date(unlist(lapply(chainData, function(x) x$InputCollect$window_start)), origin = "1970-01-01"),
       window_end = as.Date(unlist(lapply(chainData, function(x) x$InputCollect$window_end)), origin = "1970-01-01"),
-      duration = unlist(lapply(chainData, function(x) x$InputCollect$refresh_steps))
+      duration = c(0, unlist(lapply(chainData, function(x) x$InputCollect$refresh_steps)))
     ) %>%
       mutate(days = .data$window_end - .data$window_start) %>%
       filter(.data$duration > 0) %>%
@@ -1570,6 +1570,7 @@ decomp_plot <- function(
   ))
   varType <- str_to_title(InputCollect$dep_var_type)
   pal <- names(lares::lares_pal()$palette)
+
   df <- OutputCollect$xDecompVecCollect[OutputCollect$xDecompVecCollect$solID %in% solID, ] %>%
     select(
       "solID", "ds", "dep_var", any_of("intercept"),
@@ -1579,24 +1580,49 @@ decomp_plot <- function(
     filter(!.data$variable %in% exclude) %>%
     mutate(variable = ifelse(
       .data$variable %in% bvars, paste0("Baseline_L", baseline_level), as.character(.data$variable)
-    )) %>%
+    ))
+
+  # Sort variables by baseline first & amount of absolute impact
+  levs <- df %>%
+    group_by(.data$variable) %>%
+    summarize(impact = sum(abs(.data$value))) %>%
+    mutate(is_baseline = grepl("Baseline_L", .data$variable)) %>%
+    arrange(desc(.data$is_baseline), desc(.data$impact)) %>%
+    filter(.data$impact > 0) %>%
+    pull(.data$variable)
+  df <- df %>%
     group_by(.data$solID, .data$ds, .data$variable) %>%
     summarise(
       value = sum(.data$value, na.rm = TRUE),
       value = sum(.data$value, na.rm = TRUE),
       .groups = "drop"
     ) %>%
-    arrange(abs(.data$value)) %>%
-    mutate(variable = factor(.data$variable, levels = unique(.data$variable)))
-  p <- ggplot(df, aes(x = .data$ds, y = .data$value, fill = .data$variable)) +
-    facet_grid(.data$solID ~ .) +
+    filter(.data$variable %in% levs) %>%
+    mutate(variable = factor(.data$variable, levels = rev(levs)))
+
+  p <- ggplot(df, aes(x = as.character(ds), y = value, fill = variable)) +
+    facet_grid(solID ~ .) +
     labs(
       title = paste(varType, "Decomposition by Variable"),
       x = NULL, y = paste(intType, varType), fill = NULL
     ) +
-    geom_area() +
+    geom_col(width = 1) +
     theme_lares(background = "white", legend = "right") +
+    geom_hline(yintercept = 0) +
     scale_fill_manual(values = rev(pal[seq(length(unique(df$variable)))])) +
-    scale_y_abbr()
+    scale_y_abbr() +
+    # Must create custom splits because dates is character to be able to be bars
+    scale_x_discrete(
+      breaks = get_evenly_separated_dates(df$ds, n = 6),
+      labels = function(x) format(as.Date(x), "%m/%y")
+    )
   return(p)
+}
+
+get_evenly_separated_dates <- function(dates, n = 6) {
+  dates <- sort(dates)
+  intervals <- n - 1
+  indices <- round(seq(1, length(dates), length.out = n))
+  selected_dates <- dates[indices]
+  return(as.character(selected_dates))
 }
