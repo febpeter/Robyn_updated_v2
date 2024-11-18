@@ -43,7 +43,7 @@ robyn_clusters <- function(input, dep_var_type,
                            cluster_by = "hyperparameters",
                            all_media = NULL,
                            k = "auto", wss_var = 0.06, max_clusters = 10, limit = 1,
-                           weights = rep(1, 4), dim_red = "PCA",
+                           weights = rep(1, 3), dim_red = "PCA",
                            quiet = FALSE, export = FALSE, seed = 123,
                            ...) {
   set.seed(seed)
@@ -67,9 +67,9 @@ robyn_clusters <- function(input, dep_var_type,
       "in order to use robyn_clusters()"
     ))
   }
-
+  
   ignore <- c("solID", "mape", "MAPE_train","decomp.rssd", "nrmse", "nrmse_test", "nrmse_train", "nrmse_val", "pareto")
-
+  
   # Auto K selected by less than 5% WSS variance (convergence)
   min_clusters <- 3
   limit_clusters <- min(nrow(df) - 1, 30)
@@ -78,8 +78,8 @@ robyn_clusters <- function(input, dep_var_type,
       {
         suppressMessages(
           clusterKmeans(df,
-            k = NULL, limit = limit_clusters, ignore = ignore,
-            dim_red = dim_red, quiet = TRUE, seed = seed
+                        k = NULL, limit = limit_clusters, ignore = ignore,
+                        dim_red = dim_red, quiet = TRUE, seed = seed
           )
         )
       },
@@ -112,7 +112,7 @@ robyn_clusters <- function(input, dep_var_type,
       k <- max_clusters
     }
   }
-
+  
   # Build clusters
   stopifnot(k %in% min_clusters:30)
   suppressMessages(
@@ -125,15 +125,15 @@ robyn_clusters <- function(input, dep_var_type,
   cls$df <- group_by(cls$df, .data$cluster) %>%
     mutate(n = n()) %>%
     ungroup()
-
+  
   # Select top models by minimum (weighted) distance to zero
   all_paid <- setdiff(names(cls$df), c(ignore, "cluster"))
   ts_validation <- ifelse("nrmse_test" %in% colnames(cls$df), TRUE, FALSE)
   top_sols <- .clusters_df(df = cls$df, all_paid, balance = weights, limit, ts_validation)
-
+  
   # Build in-cluster CI with bootstrap
   ci_list <- confidence_calcs(xDecompAgg, cls, all_paid, dep_var_type, k, cluster_by, ...)
-
+  
   output <- list(
     # Data and parameters
     data = mutate(cls$df, top_sol = .data$solID %in% top_sols$solID, cluster = as.integer(.data$cluster)),
@@ -157,7 +157,7 @@ robyn_clusters <- function(input, dep_var_type,
     plot_models_errors = .plot_topsols_errors(df, top_sols, limit, weights),
     plot_models_rois = .plot_topsols_rois(df, top_sols, all_media, limit)
   )
-
+  
   if (export) {
     write.csv(output$data, file = paste0(path, "pareto_clusters.csv"))
     write.csv(output$df_cluster_ci, file = paste0(path, "pareto_clusters_ci.csv"))
@@ -170,10 +170,10 @@ robyn_clusters <- function(input, dep_var_type,
     # Setting try() to avoid error: One or both dimensions exceed the maximum (50000px).
     #   Use `options(ragg.max_dim = ...)` to change the max
     try(suppressMessages(suppressWarnings(ggsave(paste0(path, "pareto_clusters_detail.png"),
-      plot = db, dpi = 500, width = 12, height = 4 + length(all_paid) * 2, limitsize = FALSE
+                                                 plot = db, dpi = 500, width = 12, height = 4 + length(all_paid) * 2, limitsize = FALSE
     ))))
   }
-
+  
   return(output)
 }
 
@@ -188,7 +188,7 @@ confidence_calcs <- function(
     mutate(n = n()) %>%
     filter(!is.na(.data$cluster)) %>%
     arrange(.data$cluster, .data$rn)
-
+  
   cluster_collect <- list()
   chn_collect <- list()
   sim_collect <- list()
@@ -215,7 +215,7 @@ confidence_calcs <- function(
         boot_se <- boot_res$se
         ci_low <- ifelse(boot_res$ci[1] <= 0, 0, boot_res$ci[1])
         ci_up <- boot_res$ci[2]
-
+        
         # Collect loop results
         chn_collect[[i]] <- df_chn %>%
           mutate(
@@ -238,7 +238,7 @@ confidence_calcs <- function(
     }
     cluster_collect[[j]] <- list(chn_collect = chn_collect, sim_collect = sim_collect)
   }
-
+  
   sim_collect <- bind_rows(lapply(cluster_collect, function(x) {
     bind_rows(lapply(x$sim_collect, function(y) y))
   })) %>%
@@ -246,7 +246,7 @@ confidence_calcs <- function(
     mutate(cluster_title = sprintf("Cl.%s (n=%s)", .data$cluster, .data$n)) %>%
     ungroup() %>%
     as_tibble()
-
+  
   df_ci <- bind_rows(lapply(cluster_collect, function(x) {
     bind_rows(lapply(x$chn_collect, function(y) y))
   })) %>%
@@ -360,7 +360,7 @@ errors_scores <- function(df, balance = rep(1, 4), ts_validation = TRUE, ...) {
   }
 }
 
-.clusters_df <- function(df, all_paid, balance = rep(1, 4), limit = 1, ts_validation = TRUE, ...) {
+.clusters_df <- function(df, all_paid, balance = rep(1, 3), limit = 1, ts_validation = TRUE, ...) {
   df %>%
     mutate(error_score = errors_scores(., balance, ts_validation = ts_validation, ...)) %>%
     replace(., is.na(.), 0) %>%
@@ -405,7 +405,7 @@ errors_scores <- function(df, balance = rep(1, 4), ts_validation = TRUE, ...) {
   }
   return(p)
 }
-                            
+
 .plot_topsols_errors <- function(df, top_sols, limit = 1, balance = rep(1, 3)) {
   balance <- balance / sum(balance)
   left_join(df, select(top_sols, 1:3), "solID") %>%
@@ -470,7 +470,7 @@ errors_scores <- function(df, balance = rep(1, 4), ts_validation = TRUE, ...) {
     # ci <- c(mean(boot_means) - me, mean(boot_means) + me)
     samp_me <- me * sqrt(samp_n)
     ci <- c(samp_mean - samp_me, samp_mean + samp_me)
-
+    
     return(list(boot_means = boot_means, ci = ci, se = se))
   } else {
     return(list(boot_means = samp, ci = c(samp, samp), se = 0))
