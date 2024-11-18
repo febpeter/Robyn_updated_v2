@@ -158,7 +158,7 @@ robyn_outputs <- function(InputCollect, OutputModels,
     clusterCollect <- try(robyn_clusters(
       OutputCollect,
       dep_var_type = InputCollect$dep_var_type,
-      quiet = quiet, export = export, weights = rep(1,4), ...
+      quiet = quiet, export = export, ...
     ))
     if ("data" %in% names(clusterCollect)) {
       OutputCollect$resultHypParam <- left_join(
@@ -179,7 +179,9 @@ robyn_outputs <- function(InputCollect, OutputModels,
           by = c("rn", "cluster")
         ) %>%
         left_join(
-          pareto_results$df_caov_pct_all,
+          pareto_results$df_caov_pct_all %>%
+            filter(type == "Carryover") %>%
+            select("solID", "rn", "carryover_pct"),
           by = c("solID", "rn")
         )
       OutputCollect$mediaVecCollect <- left_join(
