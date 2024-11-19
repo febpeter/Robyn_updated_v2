@@ -360,7 +360,7 @@ errors_scores <- function(df, balance = rep(1, 4), ts_validation = TRUE, ...) {
   }
 }
 
-.clusters_df <- function(df, all_paid, balance = rep(1, 3), limit = 1, ts_validation = TRUE, ...) {
+.clusters_df <- function(df, all_paid, balance = rep(1, 4), limit = 1, ts_validation = TRUE, ...) {
   df %>%
     mutate(error_score = errors_scores(., balance, ts_validation = ts_validation, ...)) %>%
     replace(., is.na(.), 0) %>%
@@ -406,7 +406,7 @@ errors_scores <- function(df, balance = rep(1, 4), ts_validation = TRUE, ...) {
   return(p)
 }
 
-.plot_topsols_errors <- function(df, top_sols, limit = 1, balance = rep(1, 3)) {
+.plot_topsols_errors <- function(df, top_sols, limit = 1, balance = rep(1, 4)) {
   balance <- balance / sum(balance)
   left_join(df, select(top_sols, 1:3), "solID") %>%
     mutate(
