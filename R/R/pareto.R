@@ -80,8 +80,8 @@ robyn_pareto <- function(InputCollect, OutputModels,
     # Calculate Pareto-fronts (for "all" or pareto_fronts)
     resultHypParamPareto <- filter(resultHypParam, .data$mape.qt10 == TRUE)
     paretoResults <- pareto_front(
-      xi = resultHypParamPareto$decomp.rssd,
-      yi = resultHypParamPareto$nrmse,
+      xi = resultHypParamPareto$nrmse,
+      yi = resultHypParamPareto$decomp.rssd,
       zi = resultHypParamPareto$MAPE_train,
       pareto_fronts = ifelse("auto" %in% pareto_fronts, Inf, pareto_fronts),
       sort = FALSE
@@ -558,11 +558,11 @@ robyn_pareto <- function(InputCollect, OutputModels,
 pareto_front <- function(xi, yi, zi, pareto_fronts = 1, sort = TRUE) {
   stopifnot(length(xi) == length(yi) & length(yi) == length(zi))
   d <- data.frame(xi, yi, zi)
-  Dtemp <- D <- d[order(d$xi, d$yi, d$zi, decreasing = FALSE), ]
+  Dtemp <- D <- d[order(d$yi, d$xi, d$zi, decreasing = FALSE), ]
   df <- data.frame()
   i <- 1
   while (nrow(Dtemp) >= 1 & i <= max(pareto_fronts)) {
-    these <- Dtemp[which(!duplicated(cummin(Dtemp$yi)) & !duplicated(cummin(Dtemp$zi))), ]
+    these <- Dtemp[which(!duplicated(cummin(Dtemp$xi)) & !duplicated(cummin(Dtemp$zi))), ]
     these$pareto_front <- i
     df <- rbind(df, these)
     Dtemp <- Dtemp[!row.names(Dtemp) %in% row.names(these), ]
