@@ -80,8 +80,8 @@ robyn_pareto <- function(InputCollect, OutputModels,
     # Calculate Pareto-fronts (for "all" or pareto_fronts)
     resultHypParamPareto <- filter(resultHypParam, .data$mape.qt10 == TRUE)
     paretoResults <- pareto_front(
-      xi = resultHypParamPareto$nrmse,
-      yi = resultHypParamPareto$decomp.rssd,
+      xi = resultHypParamPareto$decomp.rssd,
+      yi = resultHypParamPareto$nrmse,
       zi = resultHypParamPareto$MAPE_train,
       pareto_fronts = ifelse("auto" %in% pareto_fronts, Inf, pareto_fronts),
       sort = FALSE
